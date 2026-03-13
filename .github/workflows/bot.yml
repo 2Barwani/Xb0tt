@@ -42,7 +42,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          touch posted.txt bot_state.json
-          git add posted.txt bot_state.json
-          git diff --staged --quiet || git commit -m "Update bot state"
-          git push
+          git pull --rebase origin main || true
+          if [ -f posted.txt ] || [ -f bot_state.json ]; then
+            git add -f posted.txt bot_state.json 2>/dev/null || true
+            git diff --staged --quiet || git commit -m "Update bot state"
+            git push
+          else
+            echo "No state files to commit."
+          fi
