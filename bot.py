@@ -327,8 +327,8 @@ def run_once(dry_run: bool = False):
         save_state(state)
         return
 
-    # Priority order: War (instant) > SPY (90 min) > Bitcoin (4 hr) > Fed (news-only)
-    for topic_key in ["war", "spy", "bitcoin", "fed"]:
+    # Priority: War (X accounts) + SPY + Fed first, then Bitcoin
+    for topic_key in ["war", "spy", "fed", "bitcoin"]:
         if state["daily_total"] >= DAILY_LIMIT:
             log.info("Daily limit reached mid-run. Stopping.")
             break
