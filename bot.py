@@ -8,6 +8,7 @@ import json
 import time
 import random
 import logging
+import re
 import feedparser
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -172,6 +173,17 @@ def record_post(state: dict, topic_key: str):
 
 # ── X account fetching ────────────────────────────────────────────────────────
 
+def clean_tweet_text(text: str) -> str:
+    """Clean up tweet text: remove URLs, @mentions, hashtags, extra whitespace."""
+    text = re.sub(r"https?://\S+", "", text)       # remove URLs
+    text = re.sub(r"@\w+", "", text)                # remove @mentions
+    text = re.sub(r"#\w+", "", text)                # remove hashtags
+    text = re.sub(r"\s{2,}", " ", text).strip()     # collapse whitespace
+    # Remove leading/trailing punctuation artifacts
+    text = text.strip("- :;,.")
+    return text
+
+
 def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
     try:
         client = get_client()
@@ -190,7 +202,7 @@ def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
             return []
         articles = []
         for tweet in tweets.data:
-            text = tweet.text.strip()
+            text = clean_tweet_text(tweet.text)
             if not text:
                 continue
             title = text[:100] + ("…" if len(text) > 100 else "")
