@@ -9,6 +9,8 @@ import time
 import random
 import logging
 import re
+import tempfile
+import requests
 import feedparser
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -36,6 +38,16 @@ def get_client():
         bearer_token=os.getenv("X_BEARER_TOKEN"),
         wait_on_rate_limit=True,
     )
+
+def get_v1_api():
+    """v1.1 API for media uploads."""
+    auth = tweepy.OAuth1UserHandler(
+        os.getenv("X_API_KEY"),
+        os.getenv("X_API_SECRET"),
+        os.getenv("X_ACCESS_TOKEN"),
+        os.getenv("X_ACCESS_TOKEN_SECRET"),
+    )
+    return tweepy.API(auth)
 
 # ── Topic config ──────────────────────────────────────────────────────────────
 #
@@ -173,6 +185,54 @@ def record_post(state: dict, topic_key: str):
 
 # ── X account fetching ────────────────────────────────────────────────────────
 
+# Keywords that signal an important/breaking tweet worth posting
+PRIORITY_KEYWORDS = [
+    "breaking", "just in", "urgent", "confirmed", "developing",
+    "explosion", "strike", "attack", "killed", "destroyed",
+    "launched", "invasion", "offensive", "captured", "surrender",
+    "missile", "drone", "airstrike", "bombed", "troops",
+    "ceasefire", "escalation", "warning", "alert", "massive",
+]
+
+def is_important_tweet(text: str) -> bool:
+    """Check if tweet text contains breaking/attention-worthy keywords."""
+    lower = text.lower()
+    return any(kw in lower for kw in PRIORITY_KEYWORDS)
+
+
+def download_video(url: str) -> str | None:
+    """Download video to a temp file. Returns path or None."""
+    try:
+        resp = requests.get(url, stream=True, timeout=30)
+        resp.raise_for_status()
+        suffix = ".mp4"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        for chunk in resp.iter_content(chunk_size=8192):
+            tmp.write(chunk)
+        tmp.close()
+        log.info(f"Downloaded video: {tmp.name}")
+        return tmp.name
+    except Exception as e:
+        log.warning(f"Video download error: {e}")
+        return None
+
+
+def upload_video(video_path: str) -> int | None:
+    """Upload video via v1.1 chunked upload. Returns media_id or None."""
+    try:
+        api = get_v1_api()
+        media = api.media_upload(
+            video_path,
+            media_category="tweet_video",
+            chunked=True,
+        )
+        log.info(f"Uploaded video, media_id: {media.media_id}")
+        return media.media_id
+    except Exception as e:
+        log.warning(f"Video upload error: {e}")
+        return None
+
+
 def clean_tweet_text(text: str) -> str:
     """Clean up tweet text: remove URLs, @mentions, hashtags, extra whitespace."""
     text = re.sub(r"https?://\S+", "", text)       # remove URLs
@@ -195,19 +255,42 @@ def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
         tweets = client.get_users_tweets(
             user_id,
             max_results=min(limit, 100),
-            tweet_fields=["created_at", "text"],
+            tweet_fields=["created_at", "text", "attachments"],
+            media_fields=["type", "variants"],
+            expansions=["attachments.media_keys"],
             exclude=["retweets", "replies"],
         )
         if not tweets.data:
             return []
+        # Map media keys to video URLs
+        video_map = {}
+        if tweets.includes and "media" in tweets.includes:
+            for media in tweets.includes["media"]:
+                if media.type == "video" and hasattr(media, "variants"):
+                    # Pick highest bitrate mp4
+                    mp4s = [v for v in media.variants if v.get("content_type") == "video/mp4"]
+                    if mp4s:
+                        best = max(mp4s, key=lambda v: v.get("bit_rate", 0))
+                        video_map[media.media_key] = best["url"]
         articles = []
         for tweet in tweets.data:
-            text = clean_tweet_text(tweet.text)
+            raw_text = tweet.text
+            # Only post important/breaking tweets
+            if not is_important_tweet(raw_text):
+                continue
+            text = clean_tweet_text(raw_text)
             if not text:
                 continue
             title = text[:100] + ("…" if len(text) > 100 else "")
             link = f"https://x.com/{username}/status/{tweet.id}"
-            articles.append({"title": title, "link": link, "summary": text})
+            # Check for video
+            video_url = None
+            if tweet.attachments and "media_keys" in tweet.attachments:
+                for key in tweet.attachments["media_keys"]:
+                    if key in video_map:
+                        video_url = video_map[key]
+                        break
+            articles.append({"title": title, "link": link, "summary": text, "video_url": video_url})
         return articles
     except Exception as e:
         log.warning(f"X account fetch error (@{username}): {e}")
@@ -311,8 +394,19 @@ def post_topic(topic_key: str, state: dict, dry_run: bool = False) -> bool:
         if not dry_run:
             try:
                 client = get_client()
-                client.create_tweet(text=tweet)
-                log.info("Posted successfully")
+                media_id = None
+                video_url = article.get("video_url")
+                if video_url:
+                    video_path = download_video(video_url)
+                    if video_path:
+                        media_id = upload_video(video_path)
+                        os.unlink(video_path)  # cleanup temp file
+                if media_id:
+                    client.create_tweet(text=tweet, media_ids=[media_id])
+                    log.info("Posted successfully (with video)")
+                else:
+                    client.create_tweet(text=tweet)
+                    log.info("Posted successfully")
             except tweepy.TweepyException as e:
                 log.error(f"Twitter API error: {e}")
                 return False
