@@ -244,10 +244,13 @@ def compose_tweet(topic_key: str, article: dict) -> str:
     title = article["title"]
     link  = article["link"]
 
-    url_len = 23
+    # Skip link for X account sources (used only for dedup, not in tweet)
+    is_x_source = link.startswith("https://x.com/")
+
+    url_len = 0 if is_x_source else 23
     tag_len = len(tags) + 1
     prefix  = f"{emoji} "
-    suffix  = f"\n\n{tags}\n{link}"
+    suffix  = f"\n\n{tags}" if is_x_source else f"\n\n{tags}\n{link}"
 
     available = MAX_TWEET - len(prefix) - tag_len - url_len - 4
     if len(title) > available:
