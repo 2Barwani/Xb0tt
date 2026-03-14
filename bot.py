@@ -59,8 +59,8 @@ def get_v1_api():
 #
 #  Budget split (17/day):
 #    SPY:     7 tweets/day
-#    War:     5 tweets/day
-#    Bitcoin: 4 tweets/day
+#    War:     7 tweets/day
+#    Bitcoin: 2 tweets/day
 #    Fed:     1 tweet/day  (only when newsworthy)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ TOPICS = {
         "keywords": ["war", "conflict", "military", "troops", "missile", "attack", "ceasefire", "ukraine", "russia", "israel", "gaza", "nato", "sanctions", "invasion"],
         "x_accounts": ["osint613", "sentdefender", "WarMonitor3"],
         "cooldown_minutes": 0,       # instant — post whenever news is found
-        "daily_max": 5,
+        "daily_max": 7,
     },
     "fed": {
         "label": "Federal Reserve",
@@ -119,7 +119,7 @@ TOPICS = {
         ],
         "keywords": ["bitcoin", "btc", "crypto", "blockchain", "satoshi", "halving", "etf", "coinbase", "binance", "ethereum", "defi", "web3", "whale"],
         "cooldown_minutes": 240,     # every 4 hours
-        "daily_max": 4,
+        "daily_max": 2,
     },
 }
 
