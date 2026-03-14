@@ -185,21 +185,6 @@ def record_post(state: dict, topic_key: str):
 
 # ── X account fetching ────────────────────────────────────────────────────────
 
-# Keywords that signal an important/breaking tweet worth posting
-PRIORITY_KEYWORDS = [
-    "breaking", "just in", "urgent", "confirmed", "developing",
-    "explosion", "strike", "attack", "killed", "destroyed",
-    "launched", "invasion", "offensive", "captured", "surrender",
-    "missile", "drone", "airstrike", "bombed", "troops",
-    "ceasefire", "escalation", "warning", "alert", "massive",
-]
-
-def is_important_tweet(text: str) -> bool:
-    """Check if tweet text contains breaking/attention-worthy keywords."""
-    lower = text.lower()
-    return any(kw in lower for kw in PRIORITY_KEYWORDS)
-
-
 def download_video(url: str) -> str | None:
     """Download video to a temp file. Returns path or None."""
     try:
@@ -241,6 +226,13 @@ def clean_tweet_text(text: str) -> str:
     text = re.sub(r"\s{2,}", " ", text).strip()     # collapse whitespace
     # Remove leading/trailing punctuation artifacts
     text = text.strip("- :;,.")
+    # Make headline trendy — capitalize first letter of each sentence, add punch
+    if text:
+        text = ". ".join(s.strip().capitalize() for s in text.split(". ") if s.strip())
+        # Add BREAKING prefix if not already there
+        upper = text.upper()
+        if not any(tag in upper for tag in ["BREAKING", "JUST IN", "URGENT", "DEVELOPING"]):
+            text = f"BREAKING: {text}"
     return text
 
 
@@ -262,35 +254,36 @@ def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
         )
         if not tweets.data:
             return []
-        # Map media keys to video URLs
-        video_map = {}
+        # Map media keys to downloadable URLs (video, image, gif)
+        media_map = {}  # key -> {"url": ..., "type": ...}
         if tweets.includes and "media" in tweets.includes:
             for media in tweets.includes["media"]:
                 if media.type == "video" and hasattr(media, "variants"):
-                    # Pick highest bitrate mp4
                     mp4s = [v for v in media.variants if v.get("content_type") == "video/mp4"]
                     if mp4s:
                         best = max(mp4s, key=lambda v: v.get("bit_rate", 0))
-                        video_map[media.media_key] = best["url"]
+                        media_map[media.media_key] = {"url": best["url"], "type": "video"}
+                elif media.type == "animated_gif" and hasattr(media, "variants"):
+                    mp4s = [v for v in media.variants if v.get("content_type") == "video/mp4"]
+                    if mp4s:
+                        media_map[media.media_key] = {"url": mp4s[0]["url"], "type": "gif"}
+                elif media.type == "photo" and hasattr(media, "url"):
+                    media_map[media.media_key] = {"url": media.url, "type": "photo"}
         articles = []
         for tweet in tweets.data:
-            raw_text = tweet.text
-            # Only post important/breaking tweets
-            if not is_important_tweet(raw_text):
-                continue
-            text = clean_tweet_text(raw_text)
+            text = clean_tweet_text(tweet.text)
             if not text:
                 continue
             title = text[:100] + ("…" if len(text) > 100 else "")
             link = f"https://x.com/{username}/status/{tweet.id}"
-            # Check for video
-            video_url = None
+            # Check for media (video, image, gif)
+            media_info = None
             if tweet.attachments and "media_keys" in tweet.attachments:
                 for key in tweet.attachments["media_keys"]:
-                    if key in video_map:
-                        video_url = video_map[key]
+                    if key in media_map:
+                        media_info = media_map[key]
                         break
-            articles.append({"title": title, "link": link, "summary": text, "video_url": video_url})
+            articles.append({"title": title, "link": link, "summary": text, "media": media_info})
         return articles
     except Exception as e:
         log.warning(f"X account fetch error (@{username}): {e}")
@@ -395,15 +388,24 @@ def post_topic(topic_key: str, state: dict, dry_run: bool = False) -> bool:
             try:
                 client = get_client()
                 media_id = None
-                video_url = article.get("video_url")
-                if video_url:
-                    video_path = download_video(video_url)
-                    if video_path:
-                        media_id = upload_video(video_path)
-                        os.unlink(video_path)  # cleanup temp file
+                media_info = article.get("media")
+                if media_info:
+                    file_path = download_video(media_info["url"])
+                    if file_path:
+                        if media_info["type"] in ("video", "gif"):
+                            media_id = upload_video(file_path)
+                        else:
+                            # Photo upload via v1.1
+                            try:
+                                api = get_v1_api()
+                                uploaded = api.media_upload(file_path)
+                                media_id = uploaded.media_id
+                            except Exception as e:
+                                log.warning(f"Photo upload error: {e}")
+                        os.unlink(file_path)
                 if media_id:
                     client.create_tweet(text=tweet, media_ids=[media_id])
-                    log.info("Posted successfully (with video)")
+                    log.info(f"Posted successfully (with {media_info['type']})")
                 else:
                     client.create_tweet(text=tweet)
                     log.info("Posted successfully")
