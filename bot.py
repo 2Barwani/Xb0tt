@@ -206,6 +206,13 @@ def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
 def fetch_articles(topic_key: str, limit: int = 20) -> list[dict]:
     topic = TOPICS[topic_key]
     articles = []
+
+    # Fetch from X accounts first (priority over RSS)
+    for username in topic.get("x_accounts", []):
+        x_articles = fetch_x_account_tweets(username, limit=10)
+        articles.extend(x_articles)
+
+    # Fetch from RSS feeds
     for url in topic["feeds"]:
         try:
             feed = feedparser.parse(url)
@@ -220,11 +227,6 @@ def fetch_articles(topic_key: str, limit: int = 20) -> list[dict]:
                     articles.append({"title": title, "link": link, "summary": summary})
         except Exception as e:
             log.warning(f"Feed error ({url}): {e}")
-
-    # Fetch from X accounts if configured
-    for username in topic.get("x_accounts", []):
-        x_articles = fetch_x_account_tweets(username, limit=10)
-        articles.extend(x_articles)
 
     seen, unique = set(), []
     for a in articles:
