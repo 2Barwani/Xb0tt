@@ -239,7 +239,7 @@ MAX_TWEET = 280
 
 def compose_tweet(topic_key: str, article: dict) -> str:
     topic = TOPICS[topic_key]
-    emoji = topic["emoji"]
+    label = topic["label"]
     tags  = topic["hashtags"]
     title = article["title"]
     link  = article["link"]
@@ -247,16 +247,17 @@ def compose_tweet(topic_key: str, article: dict) -> str:
     # Skip link for X account sources (used only for dedup, not in tweet)
     is_x_source = link.startswith("https://x.com/")
 
-    url_len = 0 if is_x_source else 23
-    tag_len = len(tags) + 1
-    prefix  = f"{emoji} "
-    suffix  = f"\n\n{tags}" if is_x_source else f"\n\n{tags}\n{link}"
+    header = f"🔴 {label}\n\n"
+    link_section = "" if is_x_source else f"\n\n📎 {link}"
+    footer = f"\n\n{tags}"
 
-    available = MAX_TWEET - len(prefix) - tag_len - url_len - 4
+    url_len = 0 if is_x_source else 23
+    overhead = len(header) + len(footer) + (5 if not is_x_source else 0) + url_len
+    available = MAX_TWEET - overhead
     if len(title) > available:
         title = title[:available - 1] + "…"
 
-    return f"{prefix}{title}{suffix}"
+    return f"{header}{title}{link_section}{footer}"
 
 # ── Posted tracker (avoids duplicate posts) ──────────────────────────────────
 
