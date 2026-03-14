@@ -1,14 +1,14 @@
 {
   "date": "2026-03-14",
-  "daily_total": 11,
+  "daily_total": 13,
   "topics": {
     "war": {
-      "count": 5,
-      "last_posted": "2026-03-14T21:49:48.555531+00:00"
+      "count": 6,
+      "last_posted": "2026-03-14T23:51:18.154513+00:00"
     },
     "spy": {
-      "count": 3,
-      "last_posted": "2026-03-14T21:49:51.564442+00:00"
+      "count": 4,
+      "last_posted": "2026-03-14T23:51:23.624840+00:00"
     },
     "bitcoin": {
       "count": 2,
