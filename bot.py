@@ -77,7 +77,7 @@ TOPICS = {
             "https://www.aljazeera.com/xml/rss/all.xml",
         ],
         "keywords": ["war", "conflict", "military", "troops", "missile", "attack", "ceasefire", "ukraine", "russia", "israel", "gaza", "nato", "sanctions", "invasion"],
-        "x_accounts": ["WarMonitor3"],
+        "x_accounts": ["WarMonitor3", "sentdefender"],
         "cooldown_minutes": 0,       # instant — post whenever news is found
         "daily_max": 5,
     },
