@@ -274,7 +274,7 @@ def fetch_x_account_tweets(username: str, limit: int = 10) -> list[dict]:
             text = clean_tweet_text(tweet.text)
             if not text:
                 continue
-            title = text[:100] + ("…" if len(text) > 100 else "")
+            title = text  # let compose_tweet handle truncation
             link = f"https://x.com/{username}/status/{tweet.id}"
             # Check for media (video, image, gif)
             media_info = None
@@ -327,6 +327,36 @@ def fetch_articles(topic_key: str, limit: int = 20) -> list[dict]:
 
 MAX_TWEET = 280
 
+
+def twitter_len(text: str) -> int:
+    """Count text length using Twitter's rules: chars above U+FFFF count as 2, URLs as 23."""
+    length = 0
+    for ch in text:
+        if ord(ch) > 0xFFFF:
+            length += 2  # emojis, special symbols
+        else:
+            length += 1
+    return length
+
+
+def truncate_at_word(text: str, max_len: int) -> str:
+    """Truncate text at a word boundary, adding … if truncated."""
+    if twitter_len(text) <= max_len:
+        return text
+    # Leave room for the …
+    truncated = ""
+    current_len = 0
+    for word in text.split():
+        word_len = twitter_len(word)
+        # +1 for the space before the word (except the first word)
+        needed = word_len + (1 if truncated else 0)
+        if current_len + needed + 1 > max_len:  # +1 for …
+            break
+        truncated += (" " if truncated else "") + word
+        current_len += needed
+    return truncated + "…" if truncated else text[:max_len - 1] + "…"
+
+
 def compose_tweet(topic_key: str, article: dict) -> str:
     topic = TOPICS[topic_key]
     label = topic["label"]
@@ -338,15 +368,16 @@ def compose_tweet(topic_key: str, article: dict) -> str:
     is_x_source = link.startswith("https://x.com/")
 
     header = f"🔴 {label}\n\n"
-    link_section = "" if is_x_source else f"\n\n📎 {link}"
     footer = f"\n\n{tags}"
 
-    url_len = 0 if is_x_source else 23
-    overhead = len(header) + len(footer) + (5 if not is_x_source else 0) + url_len
+    # Calculate overhead using Twitter's character counting
+    url_overhead = 0 if is_x_source else (twitter_len("\n\n📎 ") + 23)  # URLs = 23 chars on Twitter
+    overhead = twitter_len(header) + twitter_len(footer) + url_overhead
     available = MAX_TWEET - overhead
-    if len(title) > available:
-        title = title[:available - 1] + "…"
 
+    title = truncate_at_word(title, available)
+
+    link_section = "" if is_x_source else f"\n\n📎 {link}"
     return f"{header}{title}{link_section}{footer}"
 
 # ── Posted tracker (avoids duplicate posts) ──────────────────────────────────
