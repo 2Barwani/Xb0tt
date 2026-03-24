@@ -1,22 +1,22 @@
 {
-  "date": "2026-03-23",
-  "daily_total": 14,
+  "date": "2026-03-24",
+  "daily_total": 0,
   "topics": {
     "war": {
-      "count": 6,
-      "last_posted": "2026-03-23T08:59:34.115251+00:00"
+      "count": 0,
+      "last_posted": ""
     },
     "spy": {
-      "count": 5,
-      "last_posted": "2026-03-23T08:59:39.940172+00:00"
+      "count": 0,
+      "last_posted": ""
     },
     "fed": {
-      "count": 1,
-      "last_posted": "2026-03-23T02:29:38.090037+00:00"
+      "count": 0,
+      "last_posted": ""
     },
     "bitcoin": {
-      "count": 2,
-      "last_posted": "2026-03-23T06:47:00.568009+00:00"
+      "count": 0,
+      "last_posted": ""
     }
   }
 }
